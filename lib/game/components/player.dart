@@ -1,92 +1,108 @@
 import 'package:flame/components.dart';
-import 'package:flame/input.dart';
 import 'package:flame/sprite.dart';
+import 'package:flutter/painting.dart';
 
-/// The player character in the puzzle game.
-class Player extends SpriteAnimationComponent with HasGameRef, Collidable {
-  /// The player's current health or lives.
-  int _health = 3;
+/// The Player component for the puzzle game.
+class Player extends SpriteAnimationComponent with HasGameRef {
+  /// The player's current health.
+  int _health = 100;
 
-  /// The player's current score.
-  int _score = 0;
+  /// The maximum health the player can have.
+  static const int maxHealth = 100;
 
-  /// The player's current animation state.
-  PlayerState _state = PlayerState.idle;
+  /// The time the player is invulnerable after taking damage.
+  static const double invulnerabilityDuration = 2.0;
 
-  /// Initializes the player component.
-  Player({
-    required Vector2 position,
-    required Vector2 size,
-  }) : super(
-          position: position,
-          size: size,
-          anchor: Anchor.center,
-        );
+  /// The time since the player last took damage.
+  double _timeSinceLastDamage = 0.0;
+
+  /// The player's movement speed.
+  static const double moveSpeed = 200.0;
+
+  /// The player's jump force.
+  static const double jumpForce = 500.0;
+
+  /// Whether the player is currently jumping.
+  bool _isJumping = false;
+
+  /// The player's current position.
+  Vector2 _position = Vector2.zero();
+
+  /// The player's current velocity.
+  Vector2 _velocity = Vector2.zero();
+
+  /// The player's animation states.
+  late SpriteAnimation _idleAnimation;
+  late SpriteAnimation _runAnimation;
+  late SpriteAnimation _jumpAnimation;
+  late SpriteAnimation _hurtAnimation;
+
+  /// Initializes the Player component.
+  Player() : super(size: Vector2(50, 50)) {
+    _loadAnimations();
+  }
 
   @override
-  Future<void> onLoad() async {
-    await super.onLoad();
-
-    // Load the player's sprite sheet and create the animation frames
-    final spriteSheet = await gameRef.loadSpriteSheet(
-      'player.png',
-      srcSize: Vector2(32, 32),
-    );
-
-    animation = SpriteAnimation.fromFrameData(
-      spriteSheet,
-      SpriteAnimationData.sequenced(
-        amount: 4,
-        stepTime: 0.15,
-        textureSize: Vector2.all(32),
-      ),
-    );
+  void onMount() {
+    super.onMount();
+    animation = _idleAnimation;
   }
 
   @override
   void update(double dt) {
     super.update(dt);
 
-    // Update the player's animation state based on input
-    switch (_state) {
-      case PlayerState.idle:
-        // Do nothing
-        break;
-      case PlayerState.moving:
-        // Move the player based on input
-        break;
-      case PlayerState.jumping:
-        // Apply jump physics to the player
-        break;
+    // Update player position and velocity
+    _position += _velocity * dt;
+    _velocity.x = 0;
+
+    // Handle player movement
+    if (gameRef.keyboard.isPressed(LogicalKeyboardKey.arrowLeft)) {
+      _velocity.x = -moveSpeed;
+      animation = _runAnimation;
+    } else if (gameRef.keyboard.isPressed(LogicalKeyboardKey.arrowRight)) {
+      _velocity.x = moveSpeed;
+      animation = _runAnimation;
+    } else {
+      animation = _idleAnimation;
     }
-  }
 
-  @override
-  void onCollision(Set<Vector2> intersectionPoints, Collidable other) {
-    super.onCollision(intersectionPoints, other);
-
-    // Handle collisions with other game objects
-    if (other is Enemy) {
-      // Reduce player health on collision with an enemy
-      _health--;
+    if (gameRef.keyboard.isPressed(LogicalKeyboardKey.arrowUp) && !_isJumping) {
+      _velocity.y = -jumpForce;
+      _isJumping = true;
+      animation = _jumpAnimation;
     }
+
+    // Handle player invulnerability
+    _timeSinceLastDamage += dt;
+    if (_timeSinceLastDamage < invulnerabilityDuration) {
+      // Player is invulnerable
+      alpha = 0.5;
+    } else {
+      alpha = 1.0;
+    }
+
+    // Update player position
+    position = _position;
   }
 
-  /// Increases the player's score by the given amount.
-  void addScore(int amount) {
-    _score += amount;
+  /// Damages the player, reducing their health.
+  void takeDamage(int amount) {
+    _health = (_health - amount).clamp(0, maxHealth);
+    _timeSinceLastDamage = 0.0;
+    animation = _hurtAnimation;
   }
 
-  /// Returns the player's current health or lives.
-  int get health => _health;
+  /// Loads the player's animation sprites.
+  void _loadAnimations() {
+    final spriteSheet = SpriteSheet(
+      image: gameRef.images.fromCache('player.png'),
+      srcSize: Vector2(50, 50),
+    );
 
-  /// Returns the player's current score.
-  int get score => _score;
-}
-
-/// The different states the player can be in.
-enum PlayerState {
-  idle,
-  moving,
-  jumping,
+    _idleAnimation = spriteSheet.createAnimation(row: 0, cols: 4, stepTime: 0.2);
+    _runAnimation = spriteSheet.createAnimation(row: 1, cols: 4, stepTime: 0.1);
+    _jumpAnimation = spriteSheet.createAnimation(row: 2, cols: 2, stepTime: 0.2);
+    _hurtAnimation = spriteSheet.createAnimation(row: 3, cols: 2, stepTime: 0.2);
+  }
 }

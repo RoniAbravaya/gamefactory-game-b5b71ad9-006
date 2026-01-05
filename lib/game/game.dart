@@ -1,108 +1,112 @@
 import 'package:flame/game.dart';
-import 'package:flame/components.dart';
-import 'package:testLast-puzzle-06/level.dart';
+import 'package:flame/input.dart';
+import 'package:testLast-puzzle-06/analytics_service.dart';
+import 'package:testLast-puzzle-06/game_controller.dart';
+import 'package:testLast-puzzle-06/level_config.dart';
 import 'package:testLast-puzzle-06/player.dart';
-import 'package:testLast-puzzle-06/obstacle.dart';
-import 'package:testLast-puzzle-06/collectible.dart';
-import 'package:testLast-puzzle-06/analytics.dart';
-import 'package:testLast-puzzle-06/ads.dart';
-import 'package:testLast-puzzle-06/storage.dart';
+import 'package:testLast-puzzle-06/ui_overlay.dart';
 
 /// The main game class for the 'testLast-puzzle-06' game.
-class testLast-puzzle-06Game extends FlameGame {
+class testLast-puzzle-06Game extends FlameGame with TapDetector {
   /// The current game state.
   GameState _gameState = GameState.playing;
 
-  /// The current level being played.
-  Level _currentLevel;
+  /// The player object.
+  late Player _player;
 
-  /// The player component.
-  Player _player;
+  /// The game controller.
+  late GameController _gameController;
 
-  /// The score tracker.
+  /// The analytics service.
+  late AnalyticsService _analyticsService;
+
+  /// The current level configuration.
+  late LevelConfig _levelConfig;
+
+  /// The player's score.
   int _score = 0;
 
-  /// Initializes the game.
+  /// The player's lives.
+  int _lives = 3;
+
   @override
   Future<void> onLoad() async {
-    await super.onLoad();
-    _loadLevel(1);
-  }
+    // Set up the camera and world
+    camera.viewport = FixedResolutionViewport(Vector2(480, 800));
+    camera.followComponent(_player);
 
-  /// Loads the specified level.
-  void _loadLevel(int levelNumber) {
-    _currentLevel = Level(levelNumber);
-    add(_currentLevel);
-    _player = Player();
+    // Load the level configuration
+    _levelConfig = await LevelConfig.load('level1.json');
+
+    // Create the player
+    _player = Player(position: _levelConfig.playerStartPosition);
     add(_player);
-    // Add obstacles and collectibles to the level
+
+    // Create the game controller
+    _gameController = GameController(this, _player);
+    add(_gameController);
+
+    // Create the UI overlay
+    final uiOverlay = UIOverlay(this, _gameController);
+    overlays.add('ui', uiOverlay);
+
+    // Initialize the analytics service
+    _analyticsService = AnalyticsService();
+    _analyticsService.logGameStart();
   }
 
-  /// Updates the game state.
-  @override
-  void update(double dt) {
-    super.update(dt);
-    switch (_gameState) {
-      case GameState.playing:
-        // Update player, obstacles, and collectibles
-        break;
-      case GameState.paused:
-        // Pause game logic
-        break;
-      case GameState.gameOver:
-        // Handle game over logic
-        break;
-      case GameState.levelComplete:
-        // Handle level complete logic
-        break;
-    }
-  }
-
-  /// Handles user input.
   @override
   void onTapDown(TapDownInfo info) {
     super.onTapDown(info);
-    switch (_gameState) {
-      case GameState.playing:
-        // Handle player tap input
-        break;
-      case GameState.paused:
-        // Handle pause menu input
-        break;
-      case GameState.gameOver:
-        // Handle game over input
-        break;
-      case GameState.levelComplete:
-        // Handle level complete input
-        break;
+    _gameController.handleTap(info.eventPosition.game);
+  }
+
+  /// Updates the player's score.
+  void updateScore(int points) {
+    _score += points;
+    _analyticsService.logScoreUpdate(_score);
+  }
+
+  /// Decrements the player's lives.
+  void decrementLives() {
+    _lives--;
+    if (_lives <= 0) {
+      _gameState = GameState.gameOver;
+      _analyticsService.logGameOver();
     }
   }
 
-  /// Tracks the player's score.
-  void _updateScore(int points) {
-    _score += points;
-    // Update score UI
+  /// Checks if the level is complete.
+  bool isLevelComplete() {
+    return _levelConfig.isComplete();
   }
 
   /// Handles level completion.
-  void _handleLevelComplete() {
+  void handleLevelComplete() {
     _gameState = GameState.levelComplete;
-    // Save player progress
-    // Show level complete UI
-    // Unlock next level if applicable
-    // Track level completion analytics
+    _analyticsService.logLevelComplete();
   }
 
   /// Handles game over.
-  void _handleGameOver() {
+  void handleGameOver() {
     _gameState = GameState.gameOver;
-    // Show game over UI
-    // Track game over analytics
-    // Offer retry or menu options
+    _analyticsService.logGameOver();
+  }
+
+  /// Handles pausing the game.
+  void handlePause() {
+    _gameState = GameState.paused;
+    _analyticsService.logGamePaused();
+  }
+
+  /// Handles resuming the game.
+  void handleResume() {
+    _gameState = GameState.playing;
+    _analyticsService.logGameResumed();
   }
 }
 
-/// Represents the different game states.
+/// The possible game states.
 enum GameState {
   playing,
   paused,
